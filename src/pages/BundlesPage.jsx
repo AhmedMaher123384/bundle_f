@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth.js'
 import { useToasts } from '../components/useToasts.js'
 import { BundlesTable } from '../components/bundles/BundlesTable.jsx'
@@ -20,6 +20,7 @@ export function BundlesPage() {
   const { token, logout } = useAuth()
   const toasts = useToasts()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const [status, setStatus] = useState('all')
   const [search, setSearch] = useState('')
@@ -51,20 +52,29 @@ export function BundlesPage() {
   }, [logout, status, toasts, token])
 
   const sorted = useMemo(() => {
+    const kindTab = String(searchParams.get('tab') || '').trim() === 'all' ? 'all' : 'new'
     const q = String(search || '').trim().toLowerCase()
+    const byKind =
+      kindTab === 'new'
+        ? bundles.filter((b) => {
+            const k = String(b?.kind || '').trim()
+            return k === 'popup' || k === 'also_bought'
+          })
+        : [...bundles]
+
     const arr = q
-      ? bundles.filter((b) => {
+      ? byKind.filter((b) => {
           const name = String(b?.name || '').toLowerCase()
           const id = String(b?._id || '').toLowerCase()
           return name.includes(q) || id.includes(q)
         })
-      : [...bundles]
+      : [...byKind]
     arr.sort((x, y) => {
       const mult = sort.dir === 'asc' ? 1 : -1
       return mult * compare(x?.[sort.key], y?.[sort.key])
     })
     return arr
-  }, [bundles, search, sort.dir, sort.key])
+  }, [bundles, search, searchParams, sort.dir, sort.key])
 
   async function duplicateBundle(bundle) {
     try {

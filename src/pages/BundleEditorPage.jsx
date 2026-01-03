@@ -77,6 +77,7 @@ export function BundleEditorPage({ mode }) {
   const [offerType, setOfferType] = useState('quantity')
   const [discountType, setDiscountType] = useState('percentage')
   const [discountValue, setDiscountValue] = useState(10)
+  const [postAddDiscountEnabled, setPostAddDiscountEnabled] = useState(false)
 
   const [baseVariantId, setBaseVariantId] = useState(null)
   const [baseRefMode, setBaseRefMode] = useState('product')
@@ -107,6 +108,8 @@ export function BundleEditorPage({ mode }) {
   const [addons, setAddons] = useState([])
   const [variantMetaById, setVariantMetaById] = useState({})
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [alsoBoughtPlacements, setAlsoBoughtPlacements] = useState(['cart'])
+  const [popupTriggers, setPopupTriggers] = useState(['all'])
 
   useEffect(() => {
     if (mode !== 'edit') return
@@ -126,15 +129,15 @@ export function BundleEditorPage({ mode }) {
         if (cancelled) return
         setBundle(found)
 
-        const cover = normalizeVariantId(found?.presentation?.coverVariantId) || normalizeVariantId(found?.components?.[0]?.variantId)
-        const comps = Array.isArray(found?.components) ? found.components : []
-        const coverQty = comps.find((c) => String(c?.variantId) === String(cover))?.quantity ?? 1
-        const rest = cover ? comps.filter((c) => String(c?.variantId) !== String(cover)) : comps.slice(1)
-
         setName(String(found?.name || '').trim())
         const rawKind = String(found?.kind || '').trim()
         const effectiveKind =
-          rawKind === 'quantity_discount' || rawKind === 'products_discount' || rawKind === 'products_no_discount' || rawKind === 'post_add_upsell'
+          rawKind === 'quantity_discount' ||
+          rawKind === 'products_discount' ||
+          rawKind === 'products_no_discount' ||
+          rawKind === 'post_add_upsell' ||
+          rawKind === 'popup' ||
+          rawKind === 'also_bought'
             ? rawKind
             : Array.isArray(found?.rules?.tiers) && found.rules.tiers.length
               ? 'quantity_discount'
@@ -142,10 +145,59 @@ export function BundleEditorPage({ mode }) {
                 ? 'products_no_discount'
                 : 'products_discount'
         setKind(effectiveKind)
+        setAlsoBoughtPlacements(
+          Array.isArray(found?.alsoBoughtPlacements)
+            ? found.alsoBoughtPlacements.map((x) => String(x || '').trim()).filter(Boolean)
+            : ['cart']
+        )
+        setPopupTriggers(
+          Array.isArray(found?.popupTriggers) ? found.popupTriggers.map((x) => String(x || '').trim()).filter(Boolean) : ['all']
+        )
+
+        const cover = normalizeVariantId(found?.presentation?.coverVariantId) || normalizeVariantId(found?.components?.[0]?.variantId)
+        const comps = Array.isArray(found?.components) ? found.components : []
+        const coverQty = comps.find((c) => String(c?.variantId) === String(cover))?.quantity ?? 1
+        const rest = cover ? comps.filter((c) => String(c?.variantId) !== String(cover)) : comps.slice(1)
+
         setDiscountType(String(found?.rules?.type || 'percentage'))
         setDiscountValue(Number(found?.rules?.value || 0))
-        setBaseVariantId(cover)
-        setBaseRefMode(isProductRef(cover) ? 'product' : 'variant')
+        setPostAddDiscountEnabled(effectiveKind === 'post_add_upsell' && Number(found?.rules?.value || 0) > 0)
+
+        if (effectiveKind === 'also_bought') {
+          setOfferType('bundle')
+          setDiscountType('fixed')
+          setDiscountValue(0)
+          setBaseVariantId(null)
+          setBaseRefMode('product')
+          setBaseQty(1)
+          setQtyTiers([{ minQty: 1, type: 'percentage', value: 0 }])
+          setAddons(
+            comps
+              .map((c) => ({
+                variantId: normalizeVariantId(c?.variantId),
+                quantity: Math.max(1, Math.min(999, toInt(c?.quantity, 1))),
+              }))
+              .filter((x) => x.variantId)
+          )
+        } else if (effectiveKind === 'popup') {
+          setOfferType('bundle')
+          setBaseVariantId(null)
+          setBaseRefMode('product')
+          setBaseQty(1)
+          setQtyTiers([{ minQty: 1, type: 'percentage', value: 0 }])
+          setAddons(
+            comps
+              .map((c) => ({
+                variantId: normalizeVariantId(c?.variantId),
+                quantity: Math.max(1, Math.min(999, toInt(c?.quantity, 1))),
+              }))
+              .filter((x) => x.variantId)
+          )
+        } else {
+          setBaseVariantId(cover)
+          setBaseRefMode(isProductRef(cover) ? 'product' : 'variant')
+        }
+
         setPresentationTitle(String(found?.presentation?.title || '').trim())
         setPresentationSubtitle(String(found?.presentation?.subtitle || '').trim())
         setPresentationLabel(String(found?.presentation?.label || '').trim())
@@ -171,6 +223,10 @@ export function BundleEditorPage({ mode }) {
             ? settings.defaultSelectedProductIds.map((x) => String(x || '').trim()).filter(Boolean)
             : []
         )
+
+        if (effectiveKind === 'also_bought') {
+          return
+        }
 
         if (effectiveKind === 'quantity_discount') {
           setOfferType('quantity')
@@ -222,7 +278,15 @@ export function BundleEditorPage({ mode }) {
       setDiscountType('fixed')
       setDiscountValue(0)
     }
-  }, [kind, offerType])
+    if (kind === 'also_bought') {
+      setDiscountType('fixed')
+      setDiscountValue(0)
+    }
+    if (kind === 'post_add_upsell' && postAddDiscountEnabled !== true) {
+      setDiscountType('percentage')
+      setDiscountValue(0)
+    }
+  }, [kind, offerType, postAddDiscountEnabled])
 
   const effectiveProductId = useMemo(() => {
     if (routeProductId) return routeProductId
@@ -265,6 +329,7 @@ export function BundleEditorPage({ mode }) {
   }, [productVariants])
 
   useEffect(() => {
+    if (kind === 'also_bought' || kind === 'popup') return
     if (baseVariantId) return
     if (effectiveProductId) {
       setBaseVariantId(toProductRef(effectiveProductId))
@@ -276,14 +341,15 @@ export function BundleEditorPage({ mode }) {
       setBaseVariantId(fallback)
       setBaseRefMode(isProductRef(fallback) ? 'product' : 'variant')
     }
-  }, [baseVariantId, effectiveProductId, pickDefaultVariantId])
+  }, [baseVariantId, effectiveProductId, kind, pickDefaultVariantId])
 
   useEffect(() => {
     if (mode !== 'create') return
     if (!effectiveProductId) return
+    if (kind === 'also_bought' || kind === 'popup') return
     setBaseRefMode('product')
     setBaseVariantId(toProductRef(effectiveProductId))
-  }, [effectiveProductId, mode])
+  }, [effectiveProductId, kind, mode])
 
   useEffect(() => {
     if (name.trim()) return
@@ -366,7 +432,7 @@ export function BundleEditorPage({ mode }) {
       .filter((a) => a.variantId)
 
     const components = []
-    if (baseId && kind !== 'post_add_upsell') {
+    if (baseId && kind !== 'post_add_upsell' && kind !== 'also_bought' && kind !== 'popup') {
       const qty = offerType === 'quantity' ? 1 : Math.max(1, Math.min(999, toInt(baseQty, 1)))
       components.push({ variantId: baseId, quantity: qty, group: groupFromVariantId(baseId) })
     }
@@ -379,13 +445,13 @@ export function BundleEditorPage({ mode }) {
     const requiredQty =
       offerType === 'quantity'
         ? Math.max(1, Math.floor(Number(qtyTiersNormalized[0]?.minQty || 1)))
-        : kind === 'products_discount' || kind === 'products_no_discount' || kind === 'post_add_upsell'
+        : kind === 'products_discount' || kind === 'products_no_discount' || kind === 'post_add_upsell' || kind === 'also_bought' || kind === 'popup'
           ? 1
           : Math.max(1, sumQty(components))
     const primaryTier = offerType === 'quantity' ? qtyTiersNormalized[0] : null
 
     const presentation = {}
-    if (baseId) presentation.coverVariantId = baseId
+    if (baseId && kind !== 'also_bought' && kind !== 'popup') presentation.coverVariantId = baseId
     if (String(presentationTitle || '').trim()) presentation.title = String(presentationTitle || '').trim()
     if (String(presentationSubtitle || '').trim()) presentation.subtitle = String(presentationSubtitle || '').trim()
     if (String(presentationLabel || '').trim()) presentation.label = String(presentationLabel || '').trim()
@@ -407,8 +473,26 @@ export function BundleEditorPage({ mode }) {
     }
 
     const mustIncludeAllGroups = !(kind === 'products_discount' || kind === 'products_no_discount' || kind === 'post_add_upsell')
-    const normalizedDiscountType = kind === 'products_no_discount' ? 'fixed' : discountType
-    const normalizedDiscountValue = kind === 'products_no_discount' ? 0 : Number(discountValue || 0)
+    const noDiscountKind = kind === 'products_no_discount' || kind === 'also_bought' || (kind === 'post_add_upsell' && postAddDiscountEnabled !== true)
+    const normalizedDiscountType = noDiscountKind ? 'fixed' : discountType
+    const normalizedDiscountValue = noDiscountKind ? 0 : Number(discountValue || 0)
+
+    const normalizedAlsoBoughtPlacements =
+      kind === 'also_bought'
+        ? (Array.isArray(alsoBoughtPlacements) ? alsoBoughtPlacements : [])
+            .map((x) => String(x || '').trim())
+            .filter(Boolean)
+        : undefined
+
+    const normalizedPopupTriggers =
+      kind === 'popup'
+        ? (() => {
+            const current = (Array.isArray(popupTriggers) ? popupTriggers : []).map((x) => String(x || '').trim()).filter(Boolean)
+            if (current.includes('all')) return ['all']
+            const next = current.filter((x) => x !== 'all')
+            return next.length ? next : ['all']
+          })()
+        : undefined
 
     return {
       version: 1,
@@ -416,6 +500,8 @@ export function BundleEditorPage({ mode }) {
       name: String(name || '').trim(),
       status: 'draft',
       components,
+      popupTriggers: normalizedPopupTriggers,
+      alsoBoughtPlacements: normalizedAlsoBoughtPlacements,
       rules: {
         type:
           offerType === 'quantity'
@@ -453,6 +539,7 @@ export function BundleEditorPage({ mode }) {
     kind,
     name,
     offerType,
+    postAddDiscountEnabled,
     presentationBadgeColor,
     presentationBannerColor,
     presentationCta,
@@ -469,6 +556,8 @@ export function BundleEditorPage({ mode }) {
     presentationTextColor,
     presentationTitle,
     qtyTiersNormalized,
+    alsoBoughtPlacements,
+    popupTriggers,
     settingsDefaultSelectedProductIds,
     settingsProductOrder,
     settingsSelectionRequired,
@@ -477,10 +566,10 @@ export function BundleEditorPage({ mode }) {
   ])
 
   const canSubmit = useMemo(() => {
-    if (!effectiveProductId) return false
+    if (!effectiveProductId && kind !== 'also_bought' && kind !== 'popup') return false
     if (!draft.name.trim()) return false
     if (!draft.components.length) return false
-    if (offerType === 'bundle' && kind !== 'post_add_upsell' && draft.components.length < 2) return false
+    if (offerType === 'bundle' && kind !== 'post_add_upsell' && kind !== 'also_bought' && kind !== 'popup' && draft.components.length < 2) return false
     if (offerType === 'quantity') {
       if (!qtyTiersNormalized.length) return false
       if (qtyTiersNormalized.some((t) => !Number.isFinite(Number(t?.minQty)) || Number(t.minQty) < 1)) return false
@@ -506,7 +595,8 @@ export function BundleEditorPage({ mode }) {
     if (offerType === 'quantity') {
       const bestTier = qtyTiersNormalized.length ? qtyTiersNormalized[qtyTiersNormalized.length - 1] : null
       if (bestTier) badge = bestTier.type === 'percentage' ? `${bestTier.value}%` : `${bestTier.value}`
-    } else if (kind !== 'products_no_discount' && ruleType === 'percentage') badge = `${Number(draft?.rules?.value || 0)}%`
+    } else if (kind !== 'products_no_discount' && !(kind === 'post_add_upsell' && postAddDiscountEnabled !== true) && ruleType === 'percentage')
+      badge = `${Number(draft?.rules?.value || 0)}%`
     else if (ruleType === 'fixed') badge = `${Number(draft?.rules?.value || 0)}`
 
     const kindDefaultTitle =
@@ -518,11 +608,15 @@ export function BundleEditorPage({ mode }) {
             ? `${String(draft?.name || 'باقة')} - مجموعة منتجات`
             : kind === 'post_add_upsell'
               ? 'ناس كتير اشتروا كمان'
+              : kind === 'also_bought'
+                ? 'منتجات اشترها عملاؤنا ايضا'
               : String(draft?.name || 'باقة')
 
     const title =
       String(presentationTitle || '').trim() ||
-      (badge && kind !== 'products_no_discount' ? `${String(draft?.name || 'باقة')} - وفر ${badge}` : kindDefaultTitle)
+      (badge && kind !== 'products_no_discount' && !(kind === 'post_add_upsell' && postAddDiscountEnabled !== true)
+        ? `${String(draft?.name || 'باقة')} - وفر ${badge}`
+        : kindDefaultTitle)
     const subtitle = String(presentationSubtitle || '').trim() || ''
     const label = String(presentationLabel || '').trim() || ''
     const labelSub = String(presentationLabelSub || '').trim() || ''
@@ -567,6 +661,7 @@ export function BundleEditorPage({ mode }) {
     draft,
     kind,
     offerType,
+    postAddDiscountEnabled,
     presentationBannerColor,
     presentationCta,
     presentationCtaBgColor,
@@ -600,7 +695,7 @@ export function BundleEditorPage({ mode }) {
       toasts.error('كمّل البيانات الأول.')
       return
     }
-    if (offerType === 'bundle' && kind !== 'post_add_upsell' && draft.components.length < 2) {
+    if (offerType === 'bundle' && kind !== 'post_add_upsell' && kind !== 'also_bought' && kind !== 'popup' && draft.components.length < 2) {
       toasts.error('اختار منتج/منتجات تانية مع المنتج الأساسي.')
       return
     }
@@ -621,6 +716,8 @@ export function BundleEditorPage({ mode }) {
           kind: body.kind,
           name: body.name,
           components: body.components,
+          popupTriggers: body.popupTriggers,
+          alsoBoughtPlacements: body.alsoBoughtPlacements,
           rules: body.rules,
           settings: body.settings,
           presentation: body.presentation,
@@ -696,6 +793,39 @@ export function BundleEditorPage({ mode }) {
             </button>
             <button
               type="button"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
+              onClick={() => {
+                setPickerOpen(false)
+                setOfferType('bundle')
+                setKind('popup')
+                setPopupTriggers(['all'])
+                setBaseVariantId(null)
+                setBaseRefMode('product')
+                setBaseQty(1)
+              }}
+              disabled={saving || activating}
+            >
+              Popup ذكي
+            </button>
+            <button
+              type="button"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
+              onClick={() => {
+                setPickerOpen(false)
+                setOfferType('bundle')
+                setKind('also_bought')
+                setDiscountType('fixed')
+                setDiscountValue(0)
+                setBaseVariantId(null)
+                setBaseRefMode('product')
+                setBaseQty(1)
+              }}
+              disabled={saving || activating}
+            >
+              منتجات اشترها عملاؤنا ايضا
+            </button>
+            <button
+              type="button"
               className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
               onClick={async () => {
                 setSaving(true)
@@ -738,6 +868,92 @@ export function BundleEditorPage({ mode }) {
               className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-slate-900/10 focus:ring-4"
             />
           </div>
+
+          {kind === 'also_bought' ? (
+            <div className="md:col-span-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-sm font-semibold text-slate-900">أماكن الظهور</div>
+                <div className="mt-3 flex flex-wrap gap-4 text-sm">
+                  {[
+                    { id: 'all', label: 'كل الصفحات' },
+                    { id: 'home', label: 'الرئيسية' },
+                    { id: 'product', label: 'صفحة المنتج' },
+                    { id: 'cart', label: 'السلة' },
+                    { id: 'checkout', label: 'الدفع' },
+                  ].map((p) => (
+                    <label key={p.id} className="flex cursor-pointer items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={(Array.isArray(alsoBoughtPlacements) ? alsoBoughtPlacements : []).includes(p.id)}
+                        onChange={(e) => {
+                          const checked = e.target.checked
+                          setAlsoBoughtPlacements((prev) => {
+                            const current = Array.isArray(prev) ? prev.map((x) => String(x || '').trim()).filter(Boolean) : []
+                            const hasAll = current.includes('all')
+                            if (p.id === 'all') {
+                              const next = checked ? ['all'] : current.filter((x) => x !== 'all')
+                              return next.length ? next : ['cart']
+                            }
+
+                            const base = hasAll ? current.filter((x) => x !== 'all') : current
+                            const has = base.includes(p.id)
+                            const next = checked ? (has ? base : [...base, p.id]) : base.filter((x) => x !== p.id)
+                            return next.length ? next : ['cart']
+                          })
+                        }}
+                        disabled={saving || activating}
+                      />
+                      <span className="text-slate-700">{p.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {kind === 'popup' ? (
+            <div className="md:col-span-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-sm font-semibold text-slate-900">محفزات الظهور</div>
+                <div className="mt-3 flex flex-wrap gap-4 text-sm">
+                  {[
+                    { id: 'all', label: 'كل الحالات' },
+                    { id: 'home_load', label: 'عند فتح الرئيسية' },
+                    { id: 'product_view', label: 'عند فتح صفحة المنتج' },
+                    { id: 'product_exit', label: 'عند محاولة الخروج من صفحة المنتج' },
+                    { id: 'cart_view', label: 'عند فتح السلة' },
+                    { id: 'cart_add', label: 'عند إضافة للسلة' },
+                    { id: 'cart_remove', label: 'عند حذف من السلة' },
+                  ].map((t) => (
+                    <label key={t.id} className="flex cursor-pointer items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={(Array.isArray(popupTriggers) ? popupTriggers : []).includes(t.id)}
+                        onChange={(e) => {
+                          const checked = e.target.checked
+                          setPopupTriggers((prev) => {
+                            const current = Array.isArray(prev) ? prev.map((x) => String(x || '').trim()).filter(Boolean) : []
+                            const hasAll = current.includes('all')
+                            if (t.id === 'all') {
+                              const next = checked ? ['all'] : current.filter((x) => x !== 'all')
+                              return next.length ? next : ['all']
+                            }
+
+                            const base = hasAll ? current.filter((x) => x !== 'all') : current
+                            const has = base.includes(t.id)
+                            const next = checked ? (has ? base : [...base, t.id]) : base.filter((x) => x !== t.id)
+                            return next.length ? next : ['all']
+                          })
+                        }}
+                        disabled={saving || activating}
+                      />
+                      <span className="text-slate-700">{t.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <div className="md:col-span-2">
             <div className="text-sm font-medium text-slate-700">شكل البانر في صفحة المنتج</div>
@@ -987,65 +1203,67 @@ export function BundleEditorPage({ mode }) {
             </div>
           </div>
 
-          <div className="md:col-span-2">
-            <label className="text-sm font-medium text-slate-700">المنتج الأساسي</label>
-            {mode !== 'create' ? (
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  className={[
-                    'rounded-xl border px-3 py-2 text-sm font-semibold',
-                    baseRefMode === 'product'
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : 'border-slate-200 bg-white hover:bg-slate-50',
-                  ].join(' ')}
-                  onClick={() => {
-                    setBaseRefMode('product')
-                    if (effectiveProductId) setBaseVariantId(toProductRef(effectiveProductId))
-                  }}
-                  disabled={!effectiveProductId}
-                >
-                  أي Variant
-                </button>
-                <button
-                  type="button"
-                  className={[
-                    'rounded-xl border px-3 py-2 text-sm font-semibold',
-                    baseRefMode === 'variant'
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : 'border-slate-200 bg-white hover:bg-slate-50',
-                  ].join(' ')}
-                  onClick={() => {
-                    setBaseRefMode('variant')
-                    const next = pickDefaultVariantId()
-                    if (next) setBaseVariantId(next)
-                  }}
-                  disabled={!productVariants.length}
-                >
-                  Variant محدد
-                </button>
-              </div>
-            ) : null}
+          {kind !== 'also_bought' && kind !== 'popup' ? (
+            <div className="md:col-span-2">
+              <label className="text-sm font-medium text-slate-700">المنتج الأساسي</label>
+              {mode !== 'create' ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className={[
+                      'rounded-xl border px-3 py-2 text-sm font-semibold',
+                      baseRefMode === 'product'
+                        ? 'border-slate-900 bg-slate-900 text-white'
+                        : 'border-slate-200 bg-white hover:bg-slate-50',
+                    ].join(' ')}
+                    onClick={() => {
+                      setBaseRefMode('product')
+                      if (effectiveProductId) setBaseVariantId(toProductRef(effectiveProductId))
+                    }}
+                    disabled={!effectiveProductId}
+                  >
+                    أي Variant
+                  </button>
+                  <button
+                    type="button"
+                    className={[
+                      'rounded-xl border px-3 py-2 text-sm font-semibold',
+                      baseRefMode === 'variant'
+                        ? 'border-slate-900 bg-slate-900 text-white'
+                        : 'border-slate-200 bg-white hover:bg-slate-50',
+                    ].join(' ')}
+                    onClick={() => {
+                      setBaseRefMode('variant')
+                      const next = pickDefaultVariantId()
+                      if (next) setBaseVariantId(next)
+                    }}
+                    disabled={!productVariants.length}
+                  >
+                    Variant محدد
+                  </button>
+                </div>
+              ) : null}
 
-            {mode !== 'create' && baseRefMode === 'variant' ? (
-              <select
-                value={normalizeVariantId(baseVariantId) || ''}
-                onChange={(e) => setBaseVariantId(normalizeVariantId(e.target.value))}
-                disabled={!productVariants.length}
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none ring-slate-900/10 focus:ring-4 disabled:opacity-60"
-              >
-                <option value="">اختار Variant</option>
-                {productVariants.map((v) => (
-                  <option key={v.variantId} value={v.variantId}>
-                    {v.name} ({v.variantId})
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800">{baseVariantLabel}</div>
-            )}
-            <div className="mt-1 text-xs text-slate-600">المختار: {baseVariantLabel}</div>
-          </div>
+              {mode !== 'create' && baseRefMode === 'variant' ? (
+                <select
+                  value={normalizeVariantId(baseVariantId) || ''}
+                  onChange={(e) => setBaseVariantId(normalizeVariantId(e.target.value))}
+                  disabled={!productVariants.length}
+                  className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none ring-slate-900/10 focus:ring-4 disabled:opacity-60"
+                >
+                  <option value="">اختار Variant</option>
+                  {productVariants.map((v) => (
+                    <option key={v.variantId} value={v.variantId}>
+                      {v.name} ({v.variantId})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800">{baseVariantLabel}</div>
+              )}
+              <div className="mt-1 text-xs text-slate-600">المختار: {baseVariantLabel}</div>
+            </div>
+          ) : null}
 
           {offerType === 'quantity' ? (
             <div className="md:col-span-2">
@@ -1126,15 +1344,17 @@ export function BundleEditorPage({ mode }) {
             </div>
           ) : (
             <>
-              <div className="md:col-span-2">
-                <label className="text-sm font-medium text-slate-700">كمية المنتج الأساسي</label>
-                <input
-                  value={baseQty}
-                  onChange={(e) => setBaseQty(Math.max(1, Math.min(999, toInt(e.target.value, 1))))}
-                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-slate-900/10 focus:ring-4"
-                  inputMode="numeric"
-                />
-              </div>
+              {kind !== 'also_bought' && kind !== 'popup' ? (
+                <div className="md:col-span-2">
+                  <label className="text-sm font-medium text-slate-700">كمية المنتج الأساسي</label>
+                  <input
+                    value={baseQty}
+                    onChange={(e) => setBaseQty(Math.max(1, Math.min(999, toInt(e.target.value, 1))))}
+                    className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-slate-900/10 focus:ring-4"
+                    inputMode="numeric"
+                  />
+                </div>
+              ) : null}
 
               <div className="md:col-span-2">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -1307,7 +1527,52 @@ export function BundleEditorPage({ mode }) {
             </>
           )}
 
-          {offerType === 'bundle' ? (
+          {offerType === 'bundle' && kind === 'post_add_upsell' ? (
+            <>
+              <div className="md:col-span-2">
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={postAddDiscountEnabled === true}
+                    onChange={(e) => setPostAddDiscountEnabled(e.target.checked)}
+                    disabled={saving || activating}
+                  />
+                  <span className="text-slate-700">تفعيل خصم على Upsell بعد الإضافة</span>
+                </label>
+              </div>
+
+              {postAddDiscountEnabled ? (
+                <>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">نوع الخصم</label>
+                    <select
+                      value={discountType}
+                      onChange={(e) => setDiscountType(e.target.value)}
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none ring-slate-900/10 focus:ring-4"
+                    >
+                      <option value="percentage">خصم %</option>
+                      <option value="fixed">خصم ثابت</option>
+                      <option value="bundle_price">سعر ثابت للباندل</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">
+                      {discountType === 'bundle_price' ? 'السعر النهائي للباندل' : 'قيمة الخصم'}
+                    </label>
+                    <input
+                      value={discountValue}
+                      onChange={(e) => setDiscountValue(Number(e.target.value || 0))}
+                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-slate-900/10 focus:ring-4"
+                      inputMode="decimal"
+                    />
+                  </div>
+                </>
+              ) : null}
+            </>
+          ) : null}
+
+          {offerType === 'bundle' && kind !== 'post_add_upsell' ? (
             <>
               <div>
                 <label className="text-sm font-medium text-slate-700">نوع الخصم</label>
