@@ -49,68 +49,73 @@ function StoreCard({ store }) {
   const freshness = timeTone(store?.lastAt)
 
   const statusColor = freshness === 'emerald' ? '#10b981' : freshness === 'sky' ? '#38bdf8' : '#6b7280'
-  const statusBg = freshness === 'emerald' ? '#d1fae5' : freshness === 'sky' ? '#e0f2fe' : '#f3f4f6'
 
   return (
     <Link
       to={`/public-media/${encodeURIComponent(storeId)}`}
-      className="block border border-white/20 bg-[#1a1a1a] p-5"
+      className="block border-l-4 bg-[#1a1a1a] focus:outline-none"
+      style={{ borderLeftColor: statusColor }}
     >
-      <div className="flex gap-4">
-        <div className="flex-shrink-0">
-          <div className="relative w-16 h-16 border border-white/20 flex items-center justify-center" style={{ backgroundColor: statusBg }}>
-            {storeLogoUrl ? (
-              <img 
-                className="w-full h-full object-cover" 
-                alt="" 
-                src={storeLogoUrl} 
-              />
-            ) : (
-              <div className="text-base font-bold text-[#1a1a1a]">{initialsFromName(storeName)}</div>
-            )}
-            <div 
-              className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 border-2 border-[#1a1a1a]" 
-              style={{ backgroundColor: statusColor }}
-            />
-          </div>
-        </div>
-        
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-3 mb-2">
-            <div className="flex-1 min-w-0">
-              <h3 className="text-base font-bold text-[#18b5d5] mb-1">{storeName}</h3>
-              <div className="text-xs text-white/50 mb-1">
-                <span className="font-mono">{storeId}</span>
-              </div>
-              {(storeDomain || storeUrl) && (
-                <div className="text-xs text-white/40">
-                  {storeDomain || storeUrl}
-                </div>
+      {/* Header Section */}
+      <div className="border-b border-white/5 bg-[#1f1f1f] px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center bg-[#18b5d5]/10 border border-[#18b5d5]/20">
+              {storeLogoUrl ? (
+                <img className="h-full w-full object-cover" alt="" src={storeLogoUrl} />
+              ) : (
+                <span className="text-sm font-bold text-[#18b5d5]">{initialsFromName(storeName)}</span>
               )}
             </div>
-            
-            <div className="flex-shrink-0 bg-[#18b5d5] text-white font-bold px-3 py-1.5 text-sm">
-              {total.toLocaleString()}
+            <div>
+              <h3 className="text-base font-bold text-white mb-0.5">{storeName}</h3>
+              <p className="text-xs font-mono text-white/40">{storeId}</p>
             </div>
           </div>
-
-          <div className="text-xs text-white/40 mb-3">
-            آخر رفع: {formatDate(store?.lastAt)}
+          <div className="text-right">
+            <div className="text-xs text-white/40 mb-1">إجمالي الملفات</div>
+            <div className="text-2xl font-bold text-[#18b5d5]">{total.toLocaleString()}</div>
           </div>
+        </div>
+      </div>
 
-          <div className="grid grid-cols-3 gap-2">
-            <div className="border border-emerald-500/30 bg-emerald-500/10 p-2 text-center">
-              <div className="text-xs text-emerald-400/70 mb-0.5">صور</div>
-              <div className="text-sm font-bold text-emerald-400">{images.toLocaleString()}</div>
+      {/* Info Section */}
+      <div className="border-b border-white/5 px-6 py-3 bg-[#1a1a1a]">
+        <div className="grid grid-cols-2 gap-4 text-xs">
+          <div>
+            <span className="text-white/40">الدومين:</span>
+            <span className="mr-2 text-white/70">{storeDomain || storeUrl || '—'}</span>
+          </div>
+          <div className="text-left">
+            <span className="text-white/40">آخر رفع:</span>
+            <span className="mr-2 text-white/70">{formatDate(store?.lastAt)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Section */}
+      <div className="px-6 py-4">
+        <div className="grid grid-cols-3 gap-4">
+          <div className="text-center">
+            <div className="mb-2 h-1 w-full bg-white/5">
+              <div className="h-full bg-emerald-500" style={{ width: `${total > 0 ? (images / total * 100) : 0}%` }} />
             </div>
-            <div className="border border-sky-500/30 bg-sky-500/10 p-2 text-center">
-              <div className="text-xs text-sky-400/70 mb-0.5">فيديو</div>
-              <div className="text-sm font-bold text-sky-400">{videos.toLocaleString()}</div>
+            <div className="text-xs text-white/40 mb-1">صور</div>
+            <div className="text-lg font-bold text-emerald-400">{images.toLocaleString()}</div>
+          </div>
+          <div className="text-center">
+            <div className="mb-2 h-1 w-full bg-white/5">
+              <div className="h-full bg-sky-500" style={{ width: `${total > 0 ? (videos / total * 100) : 0}%` }} />
             </div>
-            <div className="border border-violet-500/30 bg-violet-500/10 p-2 text-center">
-              <div className="text-xs text-violet-400/70 mb-0.5">ملفات</div>
-              <div className="text-sm font-bold text-violet-400">{raws.toLocaleString()}</div>
+            <div className="text-xs text-white/40 mb-1">فيديو</div>
+            <div className="text-lg font-bold text-sky-400">{videos.toLocaleString()}</div>
+          </div>
+          <div className="text-center">
+            <div className="mb-2 h-1 w-full bg-white/5">
+              <div className="h-full bg-violet-500" style={{ width: `${total > 0 ? (raws / total * 100) : 0}%` }} />
             </div>
+            <div className="text-xs text-white/40 mb-1">ملفات</div>
+            <div className="text-lg font-bold text-violet-400">{raws.toLocaleString()}</div>
           </div>
         </div>
       </div>
@@ -176,118 +181,103 @@ export function PublicMediaDashboardPage() {
   const stores = Array.isArray(data.stores) ? data.stores : []
 
   return (
-    <div className="min-h-screen bg-[#292929]">
-      <div className="mx-auto w-full max-w-7xl px-4 py-8">
-        {/* Header */}
-        <div className="mb-8 bg-[#1a1a1a] border border-white/10 p-6">
-          <h1 className="text-3xl font-bold text-white mb-2">Media Dashboard</h1>
-          <p className="text-white/60 text-sm">تقسيم الميديا حسب المتجر - إدارة احترافية لجميع ملفاتك</p>
+    <div className="min-h-screen bg-[#0f0f0f]">
+      {/* Top Bar */}
+      <div className="border-b border-white/10 bg-[#1a1a1a]">
+        <div className="mx-auto max-w-[1600px] px-6 py-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-white mb-1">Media Management System</h1>
+              <p className="text-sm text-white/50">إدارة شاملة لجميع ملفات المتاجر</p>
+            </div>
+            <div className="flex items-center gap-6">
+              <div className="text-right">
+                <div className="text-xs text-white/40">إجمالي المتاجر</div>
+                <div className="text-xl font-bold text-[#18b5d5]">{Number(data.total || 0).toLocaleString()}</div>
+              </div>
+              <div className="h-10 w-px bg-white/10" />
+              <div className="text-right">
+                <div className="text-xs text-white/40">الصفحة</div>
+                <div className="text-xl font-bold text-white">{page} / {totalPages}</div>
+              </div>
+            </div>
+          </div>
         </div>
+      </div>
 
-        {/* Search & Filter */}
-        <div className="mb-6 bg-[#1a1a1a] border border-white/10 p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <div className="flex-1 flex items-center gap-3">
-              <svg className="h-5 w-5 text-white/40 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+      {/* Control Panel */}
+      <div className="border-b border-white/10 bg-[#1a1a1a]">
+        <div className="mx-auto max-w-[1600px] px-6 py-4">
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
               <input
                 value={q}
                 onChange={(e) => {
                   setQ(e.target.value)
                   setPage(1)
                 }}
-                placeholder="ابحث بـ Store ID أو اسم المتجر..."
-                className="flex-1 bg-[#252525] border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/40 focus:border-[#18b5d5]/50 focus:outline-none"
+                placeholder="بحث بـ Store ID أو اسم المتجر..."
+                className="w-full border border-white/10 bg-[#0f0f0f] px-4 py-2.5 text-sm text-white placeholder-white/30 focus:border-[#18b5d5] focus:outline-none"
                 spellCheck={false}
               />
             </div>
-            
-            <div>
-              <select
-                value={String(limit)}
-                onChange={(e) => {
-                  setLimit(Number(e.target.value))
-                  setPage(1)
-                }}
-                className="w-full sm:w-auto bg-[#252525] border border-white/10 px-4 py-2.5 text-sm text-white focus:border-[#18b5d5]/50 focus:outline-none"
-              >
-                <option value="12">12 متجر</option>
-                <option value="24">24 متجر</option>
-                <option value="36">36 متجر</option>
-                <option value="60">60 متجر</option>
-              </select>
-            </div>
+            <select
+              value={String(limit)}
+              onChange={(e) => {
+                setLimit(Number(e.target.value))
+                setPage(1)
+              }}
+              className="border border-white/10 bg-[#0f0f0f] px-4 py-2.5 text-sm text-white focus:border-[#18b5d5] focus:outline-none"
+            >
+              <option value="12">12 متجر</option>
+              <option value="24">24 متجر</option>
+              <option value="36">36 متجر</option>
+              <option value="60">60 متجر</option>
+            </select>
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="border border-white/10 bg-[#252525] px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              السابق
+            </button>
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+              className="border border-[#18b5d5] bg-[#18b5d5] px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              التالي
+            </button>
           </div>
         </div>
+      </div>
 
-        {/* Stats & Pagination */}
-        <div className="mb-6 bg-[#1a1a1a] border border-white/10 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-6">
-            <div className="flex items-center gap-8">
-              <div>
-                <div className="text-xs text-white/50 mb-1">إجمالي المتاجر</div>
-                <div className="text-2xl font-bold text-[#18b5d5]">{Number(data.total || 0).toLocaleString()}</div>
-              </div>
-              <div className="w-px h-10 bg-white/10" />
-              <div>
-                <div className="text-xs text-white/50 mb-1">الصفحة الحالية</div>
-                <div className="text-2xl font-bold text-white">{page} / {totalPages}</div>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="border border-white/10 bg-[#252525] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none"
-              >
-                السابق
-              </button>
-              <button
-                type="button"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-                className="bg-[#18b5d5] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none"
-              >
-                التالي
-              </button>
-            </div>
+      {/* Main Content */}
+      <div className="mx-auto max-w-[1600px] px-6 py-6">
+        {loading ? (
+          <div className="flex items-center justify-center py-32">
+            <Loading label="جاري التحميل..." />
           </div>
-        </div>
-
-        {/* Content */}
-        <div>
-          {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loading label="جاري تحميل المتاجر..." />
-            </div>
-          ) : null}
-          
-          {!loading && error ? (
-            <div className="border border-red-500/30 bg-red-500/10 p-6 text-center">
-              <div className="text-sm font-semibold text-red-400">{error}</div>
-            </div>
-          ) : null}
-
-          {!loading && !error ? (
-            stores.length ? (
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-                {stores.map((s) => (
-                  <StoreCard key={String(s?.storeId)} store={s} />
-                ))}
-              </div>
-            ) : (
-              <div className="bg-[#1a1a1a] border border-white/10 p-12 text-center">
-                <svg className="mx-auto h-12 w-12 text-white/20 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                </svg>
-                <div className="text-sm font-semibold text-white/60">لا توجد متاجر لعرضها</div>
-              </div>
-            )
-          ) : null}
-        </div>
+        ) : error ? (
+          <div className="border border-red-500/20 bg-red-500/5 p-8 text-center">
+            <div className="text-sm font-semibold text-red-400">{error}</div>
+          </div>
+        ) : stores.length ? (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 2xl:grid-cols-3">
+            {stores.map((s) => (
+              <StoreCard key={String(s?.storeId)} store={s} />
+            ))}
+          </div>
+        ) : (
+          <div className="border border-white/10 bg-[#1a1a1a] p-16 text-center">
+            <svg className="mx-auto mb-4 h-16 w-16 text-white/10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+            </svg>
+            <div className="text-white/40">لا توجد نتائج</div>
+          </div>
+        )}
       </div>
     </div>
   )
