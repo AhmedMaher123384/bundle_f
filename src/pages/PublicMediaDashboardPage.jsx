@@ -1,3 +1,37 @@
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { requestJson } from '../lib/http.js'
+
+function initialsFromName(name) {
+  const s = String(name || '').trim()
+  if (!s) return '—'
+  const parts = s.split(/\s+/g).filter(Boolean)
+  const first = parts[0]?.[0] || ''
+  const second = parts.length > 1 ? parts[1]?.[0] || '' : parts[0]?.[1] || ''
+  const out = `${first}${second}`.trim().toUpperCase()
+  return out || '—'
+}
+
+function ratio(part, total) {
+  const p = Number(part)
+  const t = Number(total)
+  if (!Number.isFinite(p) || !Number.isFinite(t) || t <= 0) return 0
+  return Math.max(0, Math.min(1, p / t))
+}
+
+function formatDate(v) {
+  if (!v) return '—'
+  const d = new Date(v)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleString('ar-EG', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 export function PublicMediaDashboardPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const qParam = String(searchParams.get('q') || '')
@@ -66,7 +100,6 @@ export function PublicMediaDashboardPage() {
     const storeDomain = String(store?.store?.domain || '').trim()
     const storeUrl = String(store?.store?.url || '').trim()
     const storeLogoUrl = String(store?.store?.logoUrl || '').trim()
-    const freshness = timeTone(store?.lastAt)
     const pImages = ratio(images, total)
     const pVideos = ratio(videos, total)
     const pRaws = ratio(raws, total)
