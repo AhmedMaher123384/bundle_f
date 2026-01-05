@@ -1,6 +1,61 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { Loading } from '../components/ui/Loading.jsx'
 import { requestJson } from '../lib/http.js'
+
+function formatDate(v) {
+  if (!v) return '—'
+  const d = new Date(v)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleString('ar-EG', { 
+    year: 'numeric', 
+    month: 'short', 
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+function StatPill({ label, value, tone = 'slate' }) {
+  const classes =
+    tone === 'emerald'
+      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+      : tone === 'sky'
+        ? 'bg-sky-500/10 text-sky-400 border-sky-500/20'
+        : tone === 'violet'
+          ? 'bg-violet-500/10 text-violet-400 border-violet-500/20'
+          : 'bg-white/5 text-white/70 border-white/10'
+
+  return (
+    <div className={['inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold', classes].join(' ')}>
+      <span className="opacity-80">{label}</span>
+      <span className="font-mono text-sm">{value}</span>
+    </div>
+  )
+}
+
+function clamp01(n) {
+  const x = Number(n)
+  if (!Number.isFinite(x)) return 0
+  return Math.max(0, Math.min(1, x))
+}
+
+function ratio(a, b) {
+  const x = Number(a)
+  const y = Number(b)
+  if (!Number.isFinite(x) || !Number.isFinite(y) || y <= 0) return 0
+  return clamp01(x / y)
+}
+
+function timeTone(iso) {
+  if (!iso) return 'slate'
+  const t = new Date(iso).getTime()
+  if (!Number.isFinite(t)) return 'slate'
+  const diff = Date.now() - t
+  if (diff <= 6 * 60 * 60 * 1000) return 'emerald'
+  if (diff <= 24 * 60 * 60 * 1000) return 'sky'
+  return 'slate'
+}
 
 function initialsFromName(name) {
   const s = String(name || '').trim()
@@ -12,24 +67,105 @@ function initialsFromName(name) {
   return out || '—'
 }
 
-function ratio(part, total) {
-  const p = Number(part)
-  const t = Number(total)
-  if (!Number.isFinite(p) || !Number.isFinite(t) || t <= 0) return 0
-  return Math.max(0, Math.min(1, p / t))
+function StoreLogo({ name, logoUrl, tone }) {
+  const src = String(logoUrl || '').trim()
+  const bgColor = tone === 'emerald' 
+    ? 'bg-emerald-500/20' 
+    : tone === 'sky' 
+      ? 'bg-sky-500/20' 
+      : 'bg-white/10'
+  
+  const dotColor = tone === 'emerald'
+    ? 'bg-emerald-400'
+    : tone === 'sky'
+      ? 'bg-sky-400'
+      : 'bg-white/30'
+
+  return (
+    <div className="relative">
+      <div className={['relative grid h-16 w-16 place-items-center overflow-hidden rounded-xl border border-white/10', bgColor].join(' ')}>
+        {src ? (
+          <img 
+            className="h-full w-full object-cover" 
+            alt="" 
+            loading="lazy" 
+            decoding="async" 
+            referrerPolicy="no-referrer" 
+            src={src} 
+          />
+        ) : (
+          <div className="text-lg font-bold tracking-wide text-white">{initialsFromName(name)}</div>
+        )}
+      </div>
+      <div className={['absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full border-2 border-[#292929]', dotColor].join(' ')} />
+    </div>
+  )
 }
 
-function formatDate(v) {
-  if (!v) return '—'
-  const d = new Date(v)
-  if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleString('ar-EG', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+function StoreCard({ store }) {
+  const storeId = String(store?.storeId || '')
+  const total = Number(store?.total || 0)
+  const images = Number(store?.images || 0)
+  const videos = Number(store?.videos || 0)
+  const raws = Number(store?.raws || 0)
+  const storeName = String(store?.store?.name || '').trim() || storeId || '—'
+  const storeDomain = String(store?.store?.domain || '').trim()
+  const storeUrl = String(store?.store?.url || '').trim()
+  const storeLogoUrl = String(store?.store?.logoUrl || '').trim()
+  const freshness = timeTone(store?.lastAt)
+  const pImages = ratio(images, total)
+  const pVideos = ratio(videos, total)
+  const pRaws = ratio(raws, total)
+
+  return (
+    <Link
+      to={`/public-media/${encodeURIComponent(storeId)}`}
+      className="group block rounded-xl border border-white/10 bg-[#1a1a1a] p-5 hover:border-[#18b5d5]/50 hover:bg-[#1f1f1f] focus:outline-none focus:ring-2 focus:ring-[#18b5d5]/50"
+    >
+      <div className="flex items-start gap-4">
+        <StoreLogo name={storeName} logoUrl={storeLogoUrl} tone={freshness} />
+        
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h3 className="truncate text-base font-bold text-[#18b5d5]">{storeName}</h3>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <div className="truncate font-mono text-xs text-white/50">{storeId || '—'}</div>
+                {storeDomain && (
+                  <div className="text-xs text-white/60">• {storeDomain}</div>
+                )}
+                {!storeDomain && storeUrl && (
+                  <div className="truncate text-xs text-white/60">• {storeUrl}</div>
+                )}
+              </div>
+            </div>
+            
+            <div className="shrink-0 rounded-lg bg-[#18b5d5] px-3 py-1.5 text-sm font-bold text-white">
+              {total.toLocaleString()}
+            </div>
+          </div>
+
+          <div className="mt-3 text-xs text-white/50">
+            آخر رفع: {formatDate(store?.lastAt)}
+          </div>
+
+          <div className="mt-4 overflow-hidden rounded-lg bg-white/5">
+            <div className="flex h-1.5 w-full">
+              <div className="bg-emerald-500" style={{ width: `${(pImages * 100).toFixed(2)}%` }} />
+              <div className="bg-sky-500" style={{ width: `${(pVideos * 100).toFixed(2)}%` }} />
+              <div className="bg-violet-500" style={{ width: `${(pRaws * 100).toFixed(2)}%` }} />
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <StatPill tone="emerald" label="صور" value={images.toLocaleString()} />
+            <StatPill tone="sky" label="فيديو" value={videos.toLocaleString()} />
+            <StatPill tone="violet" label="ملفات" value={raws.toLocaleString()} />
+          </div>
+        </div>
+      </div>
+    </Link>
+  )
 }
 
 export function PublicMediaDashboardPage() {
@@ -89,121 +225,23 @@ export function PublicMediaDashboardPage() {
   const totalPages = useMemo(() => Math.max(1, Math.ceil((Number(data.total || 0) || 0) / limit)), [data.total, limit])
   const stores = Array.isArray(data.stores) ? data.stores : []
 
-  // --- Component: Compact Store Row (No animation, no hover, pure data) ---
-  function StoreRow({ store, index }) {
-    const storeId = String(store?.storeId || '')
-    const total = Number(store?.total || 0)
-    const images = Number(store?.images || 0)
-    const videos = Number(store?.videos || 0)
-    const raws = Number(store?.raws || 0)
-    const storeName = String(store?.store?.name || '').trim() || storeId || '—'
-    const storeDomain = String(store?.store?.domain || '').trim()
-    const storeUrl = String(store?.store?.url || '').trim()
-    const storeLogoUrl = String(store?.store?.logoUrl || '').trim()
-    const pImages = ratio(images, total)
-    const pVideos = ratio(videos, total)
-    const pRaws = ratio(raws, total)
-
-    return (
-      <tr className="border-b border-white/5">
-        {/* Index */}
-        <td className="py-3 pl-4 pr-2 text-right text-xs text-white/40 w-8">{index + 1}.</td>
-
-        {/* Logo + Name/ID/Domain */}
-        <td className="py-3 pr-4">
-          <div className="flex items-center gap-3">
-            {/* Logo: 32x32, no border, no dot */}
-            <div className="h-8 w-8 flex-shrink-0 overflow-hidden">
-              {storeLogoUrl ? (
-                <img
-                  className="h-full w-full object-contain bg-white/5"
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  referrerPolicy="no-referrer"
-                  src={storeLogoUrl}
-                />
-              ) : (
-                <div className="h-full w-full bg-white/5 flex items-center justify-center text-[10px] font-bold text-white/60">
-                  {initialsFromName(storeName)}
-                </div>
-              )}
-            </div>
-
-            <div>
-              <div className="font-semibold text-white text-sm">{storeName}</div>
-              <div className="text-xs text-white/50 font-mono">
-                {storeId}
-                {storeDomain && ` · ${storeDomain}`}
-                {!storeDomain && storeUrl && ` · ${storeUrl}`}
-              </div>
-            </div>
-          </div>
-        </td>
-
-        {/* Stats: Icons + counts + micro progress */}
-        <td className="py-3 pr-4 w-64">
-          <div className="flex items-baseline gap-2 text-xs">
-            <span className="text-emerald-400">📷 {images.toLocaleString()}</span>
-            <span className="text-sky-400">🎥 {videos.toLocaleString()}</span>
-            <span className="text-violet-400">📁 {raws.toLocaleString()}</span>
-          </div>
-          {/* Micro progress bar: 2px height, no gap, full width */}
-          <div className="mt-0.5 h-0.5 w-full overflow-hidden">
-            <div className="h-full bg-emerald-500" style={{ width: `${(pImages * 100).toFixed(2)}%` }} />
-            <div className="h-full bg-sky-500" style={{ width: `${(pVideos * 100).toFixed(2)}%` }} />
-            <div className="h-full bg-violet-500" style={{ width: `${(pRaws * 100).toFixed(2)}%` }} />
-          </div>
-        </td>
-
-        {/* Last Upload */}
-        <td className="py-3 pr-4 w-48">
-          <div className="text-xs text-white/50">
-            {formatDate(store?.lastAt)}
-          </div>
-        </td>
-
-        {/* Total */}
-        <td className="py-3 pr-4 text-right w-20">
-          <span className="font-mono font-bold text-[#18b5d5]">
-            {total.toLocaleString()}
-          </span>
-        </td>
-
-        {/* Action (Link) */}
-        <td className="py-3 pl-2 w-12">
-          <Link
-            to={`/public-media/${encodeURIComponent(storeId)}`}
-            className="block w-6 h-6 rounded text-white/40 text-center leading-6 no-underline"
-            // بدون hover, بدون focus ring, بدون تغيير لون
-          >
-            →
-          </Link>
-        </td>
-      </tr>
-    )
-  }
-
   return (
-    <div className="min-h-screen bg-[#292929] text-sm">
-      <div className="mx-auto w-full max-w-7xl px-4 py-6">
+    <div className="min-h-screen bg-[#292929]">
+      <div className="mx-auto w-full max-w-7xl px-4 py-8">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <span className="h-0.5 w-8 bg-[#18b5d5]"></span>
-            Media Dashboard
-          </h1>
-          <p className="text-white/50 mt-1 text-sm">
-            تقسيم الميديا حسب المتجر — إدارة احترافية لجميع ملفاتك
-          </p>
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="h-1 w-12 bg-[#18b5d5] rounded-full" />
+            <h1 className="text-3xl font-bold text-white">Media Dashboard</h1>
+          </div>
+          <p className="text-white/60 text-sm mr-14">تقسيم الميديا حسب المتجر - إدارة احترافية لجميع ملفاتك</p>
         </div>
 
-        {/* Control Strip: Search + Stats + Pagination in one line */}
-        <div className="mb-5 bg-[#1a1a1a] rounded border border-white/10 px-4 py-3">
-          <div className="flex flex-wrap items-center gap-4">
-            {/* Search */}
-            <div className="flex items-center gap-2 flex-1 min-w-64">
-              <svg className="h-4 w-4 text-white/40 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        {/* Search & Filter Bar */}
+        <div className="mb-6 rounded-xl border border-white/10 bg-[#1a1a1a] p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-1 items-center gap-3">
+              <svg className="h-5 w-5 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               <input
@@ -213,89 +251,93 @@ export function PublicMediaDashboardPage() {
                   setPage(1)
                 }}
                 placeholder="ابحث بـ Store ID أو اسم المتجر..."
-                className="flex-1 bg-transparent text-white placeholder-white/40 outline-none w-full"
+                className="flex-1 bg-transparent text-sm text-white placeholder-white/40 outline-none"
                 spellCheck={false}
               />
             </div>
-
-            {/* Stats */}
-            <div className="flex items-center gap-4 text-white/60 text-xs">
-              <span>المتاجر: <span className="font-bold text-[#18b5d5]">{data.total.toLocaleString()}</span></span>
-              <span>الصفحة: <span className="font-bold">{page} / {totalPages}</span></span>
-            </div>
-
-            {/* Limit Selector */}
-            <select
-              value={String(limit)}
-              onChange={(e) => {
-                setLimit(Number(e.target.value))
-                setPage(1)
-              }}
-              className="bg-[#1f1f1f] border border-white/10 rounded px-2 py-1 text-xs text-white outline-none"
-            >
-              <option value="12">12</option>
-              <option value="24">24</option>
-              <option value="36">36</option>
-              <option value="60">60</option>
-            </select>
-
-            {/* Pagination: minimal arrows */}
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                disabled={page <= 1}
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                className="w-7 h-7 rounded flex items-center justify-center text-white/50 disabled:opacity-30"
+            
+            <div className="flex items-center gap-3">
+              <select
+                value={String(limit)}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value))
+                  setPage(1)
+                }}
+                className="rounded-lg border border-white/10 bg-[#1f1f1f] px-3 py-2 text-sm text-white outline-none hover:border-white/20 focus:border-[#18b5d5]/50"
               >
-                ‹
-              </button>
-              <button
-                type="button"
-                disabled={page >= totalPages}
-                onClick={() => setPage(p => p + 1)}
-                className="w-7 h-7 rounded flex items-center justify-center text-white/50 disabled:opacity-30"
-              >
-                ›
-              </button>
+                <option value="12">12 متجر</option>
+                <option value="24">24 متجر</option>
+                <option value="36">36 متجر</option>
+                <option value="60">60 متجر</option>
+              </select>
             </div>
           </div>
         </div>
 
-        {/* Main Content */}
+        {/* Stats & Pagination Bar */}
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/10 bg-[#1a1a1a] p-4">
+          <div className="flex items-center gap-6">
+            <div>
+              <div className="text-xs text-white/50">إجمالي المتاجر</div>
+              <div className="text-xl font-bold text-[#18b5d5]">{Number(data.total || 0).toLocaleString()}</div>
+            </div>
+            <div className="h-8 w-px bg-white/10" />
+            <div>
+              <div className="text-xs text-white/50">الصفحة الحالية</div>
+              <div className="text-xl font-bold text-white">{page} / {totalPages}</div>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="rounded-lg border border-white/10 bg-[#1f1f1f] px-4 py-2 text-sm font-semibold text-white hover:border-white/20 hover:bg-[#252525] disabled:opacity-40 disabled:hover:border-white/10 disabled:hover:bg-[#1f1f1f]"
+            >
+              السابق
+            </button>
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+              className="rounded-lg bg-[#18b5d5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#16a3c1] disabled:opacity-40 disabled:hover:bg-[#18b5d5]"
+            >
+              التالي
+            </button>
+          </div>
+        </div>
+
+        {/* Content Area */}
         <div>
           {loading ? (
-            <div className="py-16 flex justify-center">
-              <div className="text-white/70">جاري التحميل...</div>
+            <div className="flex items-center justify-center py-20">
+              <Loading label="جاري تحميل المتاجر..." />
             </div>
-          ) : error ? (
-            <div className="bg-red-500/10 border border-red-500/20 rounded px-4 py-3 text-red-400 text-sm">
-              {error}
+          ) : null}
+          
+          {!loading && error ? (
+            <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-6 text-center">
+              <div className="text-sm font-semibold text-red-400">{error}</div>
             </div>
-          ) : stores.length === 0 ? (
-            <div className="bg-[#1a1a1a] border border-white/10 rounded px-6 py-12 text-center text-white/50">
-              لا توجد متاجر مطابقة
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-white/10 bg-[#1c1c1c] text-left text-xs text-white/60">
-                    <th className="py-2 pl-4 pr-2 w-8">#</th>
-                    <th className="py-2 pr-4">المتجر</th>
-                    <th className="py-2 pr-4 w-64">الملفات</th>
-                    <th className="py-2 pr-4 w-48">آخر رفع</th>
-                    <th className="py-2 pr-4 w-20 text-right">المجموع</th>
-                    <th className="py-2 pl-2 w-12"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stores.map((s, i) => (
-                    <StoreRow key={String(s?.storeId)} store={s} index={(page - 1) * limit + i} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          ) : null}
+
+          {!loading && !error ? (
+            stores.length ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {stores.map((s) => (
+                  <StoreCard key={String(s?.storeId)} store={s} />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-white/10 bg-[#1a1a1a] p-12 text-center">
+                <svg className="mx-auto h-12 w-12 text-white/20 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                </svg>
+                <div className="text-sm font-semibold text-white/60">لا توجد متاجر لعرضها</div>
+              </div>
+            )
+          ) : null}
         </div>
       </div>
     </div>
